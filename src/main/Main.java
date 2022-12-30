@@ -16,6 +16,7 @@ public class Main {
 		Platoon platoon = new Platoon();
 		Truck truck1 = new Truck(123);
 		Truck truck2 = new Truck(124);
+		Truck truck3 = new Truck(125);
 
 		Thread platoonThread = new Thread(platoon);
 		Thread truck1Thread = new Thread(truck1);
@@ -30,18 +31,57 @@ public class Main {
 	    timer.schedule(new TimerTask() {
 	        @Override
 	        public void run() {
-	    		platoon.addTruck(truck1);
+	    		platoon.addLeader(truck1);
 	        }
 	    },2000);
+	    	    
 	    
-	    Timer timer1 = new Timer();
-	    timer.schedule(new TimerTask() {
+	    Timer timer2 = new Timer();
+	    timer2.schedule(new TimerTask() {
 	        @Override
 	        public void run() {
-	        	platoon.addTruck(truck2);
+	        	truck2.sendEngageRequest(platoon.getServerEndPoint(), platoon.getServerPort());
 	        }
 	    },4000);
-		
+	    
+	    
+	    Timer timer3 = new Timer();
+	    timer3.schedule(new TimerTask() {
+	        @Override
+	        public void run() {
+	        	truck1.accelerate(70, 1);
+	        }
+	    },7000);
+	    
+	    
+	    Timer timer4 = new Timer();
+	    timer4.schedule(new TimerTask() {
+	        @Override
+	        public void run() {
+	        	truck1.accelerate(20, -1);
+	        }
+	    },12000);
+	    
+
+	    
+	    Timer timer7 = new Timer();
+	    timer7.schedule(new TimerTask() {
+	        @Override
+	        public void run() {
+	        	truck2.leave();
+	        }
+	    },15000);
+	    
+	    
+//	    Timer timerStopPlatoon = new Timer();
+//	    timerStopPlatoon.schedule(new TimerTask() {
+//	        @Override
+//	        public void run() {
+//	        	platoon.stop();
+//	        }
+//	    },10000);
+	    
+	    
 	}
 
 }

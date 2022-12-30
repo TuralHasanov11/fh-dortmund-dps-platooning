@@ -5,5 +5,3 @@
  * @author Asus
  *
  */
-module PlatooningJava {
-}

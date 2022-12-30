@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.sql.Struct;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Timer;
@@ -17,7 +18,17 @@ enum PlatoonState
 {
     STOPPED,
     AVAILABLE,
-    ENGAGING
+    ENGAGING,
+    JOINABLE,
+    PLATOONING
+};
+
+class V2VRange{
+	public float radius;
+	
+	public V2VRange(int radius) {
+		this.radius = radius;
+	}
 };
 
 public class Platoon implements Runnable{
@@ -28,47 +39,43 @@ public class Platoon implements Runnable{
     private int serverPort = 4444;
     private String serverEndPoint = "127.0.0.1";
 	private Thread serverThread;
+	private V2VRange v2vRange;
  
 
     public Platoon() {
-    	this.trucks = new ArrayList<Truck>();
+    	trucks = new ArrayList<Truck>();
+    	setState(PlatoonState.AVAILABLE);
+    	setV2vRange(new V2VRange(100));
 	}
     
-    public void addTruck(Truck truck) {
-    	AddTruckHandler addTruckHandler = new AddTruckHandler(truck);
-    	Thread t = new Thread(addTruckHandler);
-    	t.start();
-    }
-    
-    @Override
-    public void run() {
-    	System.out.println("Platoon running on " + Thread.currentThread().getName());
-		this.setState(PlatoonState.AVAILABLE);
-  	  	
-//  	  	new Thread(()->{
-//			try {
-//				this.startServer();
-//			} catch (IOException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-//		}).start();serverEndPoint,
-		this.server = new PlatoonServer(serverEndPoint, serverPort);
-		this.serverThread = new Thread(server);
-		serverThread.start();
-  	  	
-  	  	while(true) {
-  	  		if(this.state == PlatoonState.AVAILABLE) {
-  	  		}
-  	  		if(this.state == PlatoonState.ENGAGING) {
-	  		}
-  	  		if(this.state == PlatoonState.STOPPED) {
-	  	  		Thread.currentThread().interrupt();
-  	  		}
-  	  	}
-		
+    public ArrayList<Truck> getTrucks() {
+		return trucks;
 	}
     
+	public V2VRange getV2vRange() {
+		return v2vRange;
+	}
+
+	public void setV2vRange(V2VRange v2vRange) {
+		this.v2vRange = v2vRange;
+	}
+    
+    public String getServerEndPoint() {
+		return serverEndPoint;
+	}
+
+	public void setServerEndPoint(String serverEndPoint) {
+		this.serverEndPoint = serverEndPoint;
+	}
+	
+	public void setServerPort(int port) {
+		this.serverPort = port;
+	}
+	
+	public int getServerPort() {
+		return this.serverPort;
+	}
+	
     public void setState(PlatoonState state)
 	{
 	    this.state = state;
@@ -77,19 +84,53 @@ public class Platoon implements Runnable{
 	public void setLeader(Truck truck)
 	{
 	    this.leader_truck = truck;
-	    this.leader_truck.setIsleader(true);
+	    this.leader_truck.setLeader(true);
 	}
-
-	public void platoonComplete()
+    
+    public void addLeader(Truck truck) {
+    	AddTruckHandler addTruckHandler = new AddTruckHandler(truck);
+    	Thread t = new Thread(addTruckHandler);
+    	t.start();
+    }
+    
+    @Override
+    public void run() {
+    	System.out.println("Platoon running on " + Thread.currentThread().getName());
+		this.server = new PlatoonServer(serverEndPoint, serverPort, this);
+		this.serverThread = new Thread(server);
+		serverThread.start();
+		
+  	  	while(true) {
+  	  		if(this.state == PlatoonState.JOINABLE) {
+  	  		}else if(this.state == PlatoonState.ENGAGING) {
+	  		} 
+	  		if(this.state.equals(PlatoonState.STOPPED)) {
+	  			System.out.println("STOPPPPED");
+	  		}
+  	  	}
+	}
+    
+    
+	public void stop()
 	{
-	    this.setState(PlatoonState.STOPPED);
-	    System.out.println("Platoon completed");
+	    try {
+	    	for (Truck truck : trucks) {
+	    		truck.stopConnection();
+    		} 	
+			this.server.shutdown();
+		    this.trucks.clear();
+		    System.out.println(trucks);
+	    	this.setState(PlatoonState.STOPPED);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 	
 	public boolean isRunning() {
 		return this.state == PlatoonState.AVAILABLE && this.server.isRunning(); 
 	}
 	
+
 	class AddTruckHandler implements Runnable{
 		
 		Truck truck;
@@ -102,7 +143,7 @@ public class Platoon implements Runnable{
 		public void run() {
 	    	if(trucks.isEmpty()) {
 	    		leader_truck = truck;
-	    		leader_truck.setIsleader(true);
+	    		leader_truck.setLeader(true);
 	    	}
 	    	trucks.add(truck);
 	    	
@@ -113,7 +154,7 @@ public class Platoon implements Runnable{
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
+
 		}
-		
 	}
 }
