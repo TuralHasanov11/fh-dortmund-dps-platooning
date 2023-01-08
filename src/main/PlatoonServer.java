@@ -4,20 +4,16 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Stream;
 
 import org.json.JSONObject;
+
 
 enum RequestTypes{
 	REQUEST_ENGAGE_REQUESTED,
@@ -45,12 +41,11 @@ public class PlatoonServer implements Runnable{
     private ExecutorService pool;
     private int serverPort;
     private String serverEndPoint;
-    private Platoon platoon;
+    private ArrayList<ClientPending> clientsPending;
     
-    public PlatoonServer(String endpoint, int port, Platoon platoon) {
+    public PlatoonServer(String endpoint, int port) {
     	this.setServerEndPoint(endpoint);
     	this.setServerPort(port);
-    	this.platoon = platoon;
     }
     
     @Override
@@ -60,13 +55,12 @@ public class PlatoonServer implements Runnable{
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-        this.pool = Executors.newCachedThreadPool();
-        this.clients = new ArrayList<EchoClientHandler>();
-        this.is_running = true;
+        pool = Executors.newCachedThreadPool();
+        clients = new ArrayList<EchoClientHandler>();
+        clientsPending = new ArrayList<ClientPending>();
+        is_running = true;
         
         System.out.println("Platoon Server running on " + Thread.currentThread().getName());
-		this.platoon.setState(PlatoonState.JOINABLE);
-
         
         while (true)
         {
@@ -115,6 +109,34 @@ public class PlatoonServer implements Runnable{
 	public int getServerPort() {
 		return this.serverPort;
 	}
+	
+	private class ClientPending{
+		private int id;
+		private EchoClientHandler client;
+		
+		public ClientPending(int id, EchoClientHandler client) {
+			this.setId(id);
+			this.setClient(client);
+		}
+
+		public int getId() {
+			return id;
+		}
+
+		public void setId(int id) {
+			this.id = id;
+		}
+
+		public EchoClientHandler getClient() {
+			return client;
+		}
+
+		public void setClient(EchoClientHandler client) {
+			this.client = client;
+		}
+		
+		
+	}
 
 
 	private class EchoClientHandler extends Thread {
@@ -136,34 +158,40 @@ public class PlatoonServer implements Runnable{
 				Thread.currentThread().interrupt();
 			}
             
-    		   
             String inputLine;
             JSONObject data;
             String type;
             JSONObject response;
+            
             try {
 				while ((inputLine = in.readLine()) != null) {
 					data = new JSONObject(inputLine);
 					type = (String) data.get("type");
-
+					
 					if(type.equals(RequestTypes.REQUEST_ENGAGE_REQUESTED.name())) {
 					     // send this information to leader truck to make decision
-						 clientToEngage = this;
+						 clientsPending.add(new ClientPending(data.getInt("truck_id"), this));
 						 leaderClient().sendMessage(inputLine);	
 					}
 					else if(type.equals(RequestTypes.REQUEST_ENGAGE_ACCEPTED.name())) {
 						// add truck to Platoon Clients
-						clients.add(clientToEngage);
-						// send response to engaging truck
+						final int truckId = data.getInt("truck_id");
+						ClientPending client = clientsPending.stream().filter(c -> c.getId() == truckId).findAny().get();
+						clients.add(client.getClient());
+						// send reject response to engaging truck
 						response = new JSONObject();
 						response.put("type", ResponseTypes.RESPONSE_ENGAGE_ACCEPTED);
-						clientToEngage.sendMessage(response.toString());
+						client.getClient().sendMessage(response.toString());
 					}
 					else if(type.equals(RequestTypes.REQUEST_ENGAGE_REJECTED.name())) {
-					     // send response to engaging truck
+					     // send reject response to engaging truck
 						response = new JSONObject();
 						response.put("type", ResponseTypes.RESPONSE_ENGAGE_REJECTED);
-						clientToEngage.sendMessage(response.toString());						
+						final int truckId = data.getInt("truck_id");
+						ClientPending client = clientsPending.stream().filter(c -> c.getId() == truckId).findAny().get();
+
+						client.getClient().sendMessage(response.toString());
+						clientsPending.remove(client);
 					}
 					else if(type.equals(RequestTypes.REQUEST_LEAVE.name())){
 						response = new JSONObject();
@@ -177,6 +205,7 @@ public class PlatoonServer implements Runnable{
 						response = new JSONObject();
 						response.put("type", ResponseTypes.RESPONSE_EMERGENCY_BREAKE);
 						response.put("truck_id", data.get("truck_id"));
+						response.put("acceleration", data.get("acceleration"));
 						leaderClient().sendMessage(response.toString());	
 						broadcast(response.toString(), clientsToBroadcast);
 					}
@@ -196,6 +225,7 @@ public class PlatoonServer implements Runnable{
 			out.flush();
         }
         
+        
         public void shutdown(){
         	try {
 				in.close();
@@ -209,19 +239,22 @@ public class PlatoonServer implements Runnable{
         }
         
         public void broadcast(String message) throws IOException {
-        	for (EchoClientHandler echoClient : clients) {
-    			if(echoClient != null) {
-    				echoClient.sendMessage(message);
-    			}
-    		}
+
+        	 for (EchoClientHandler echoClient : clients) {
+     			if(echoClient != null) {
+     				echoClient.sendMessage(message);
+     			}
+ 			 }
         }
         
-        public void broadcast(String message, List<EchoClientHandler> clientsToBroadcast) throws IOException {
-        	for (EchoClientHandler echoClient : clientsToBroadcast) {
-    			if(echoClient != null) {
-    				echoClient.sendMessage(message);
-    			}
-    		}
+        public void broadcast(String message, List<EchoClientHandler> clientsToBroadcast) throws IOException {        	 
+            
+              // CPU
+         	  for (EchoClientHandler echoClient : clientsToBroadcast) {
+      			if(echoClient != null) {
+      				echoClient.sendMessage(message);
+      			}
+         	  }
         }
     }
 }

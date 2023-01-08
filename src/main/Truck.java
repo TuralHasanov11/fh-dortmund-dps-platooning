@@ -15,11 +15,13 @@ import java.util.Timer;
 import java.util.TimerTask;
 import org.json.*;
 
+import com.aparapi.Kernel;
+import com.aparapi.Range;
+import java.util.Random;
 
 enum TruckState{
     JOINABLE,
-    LEAVE,
-    AVAILABLE,
+    LEAVING,
     PLATOONING,
     EMERGENCY_BREAKING
 }
@@ -34,6 +36,10 @@ public class Truck implements Runnable{
 	private int wheel_angle = 0;
     private boolean finished = false;
     private Enum<TruckState> mode; 
+	private int max_deceleration = 10;
+	
+	
+	private Platoon platoon;
     
     private InputHandler inputHandler;
     private Timer sendDataTimer;
@@ -41,6 +47,7 @@ public class Truck implements Runnable{
     private Socket clientSocket;
     private BufferedWriter out;
     private BufferedReader in;
+    
 
 	  public Truck(int id) {
 		this.id = id;
@@ -67,9 +74,9 @@ public class Truck implements Runnable{
 	  }
 
 
-  	public void accelerate(int speed, int acceleration){
+  	public void accelerate(int acceleration){
   		System.out.println("Truck " + getTruckId() + " set acceleration to " + 
-				acceleration + " " +Thread.currentThread().getName());
+  							acceleration + " " +Thread.currentThread().getName());
 		this.acceleration = acceleration;
 	}
   	
@@ -83,14 +90,24 @@ public class Truck implements Runnable{
 	
 	public void setVehicleData(JSONObject data) {
 		new Thread(()->{
-			System.out.println(data);
-			accelerate((int) data.get("speed"), (int) data.get("acceleration"));
+			accelerate((int) data.get("acceleration"));
 			setWheelAngle((int) data.get("wheel_angle"));       
 		}).start();
 	}
 	
 	public JSONObject getCoordinates() {
 		JSONObject data = new JSONObject();
+		
+//   	 	Kernel kernel = new Kernel(){
+//            @Override public void run() {
+//               int gid = getGlobalId();
+//            }
+//         };
+//         
+//         kernel.execute(Range.create(1));
+//         
+//         kernel.dispose();
+         
 		data.put("lat", Math.random() * (90 - (-90)) + (-90));
 		data.put("long", Math.random() * (180 - (-180)) + (-180));
 		return data;
@@ -121,6 +138,7 @@ public class Truck implements Runnable{
 				JSONObject data = new JSONObject();
 				data.put("type", RequestTypes.REQUEST_EMERGENCY_BREAKE);
 				data.put("truck_id", getTruckId());
+				data.put("acceleration", max_deceleration);
 		        sendMessage(data.toString());	        		 
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -206,9 +224,6 @@ public class Truck implements Runnable{
 		  		sendMessage(data.toString());
 		      
 		        		 
-			} catch (IOException e) {
-				e.printStackTrace();
-				Thread.currentThread().interrupt();
 			} catch (Exception e) {
 				e.printStackTrace();
 				Thread.currentThread().interrupt();
@@ -234,7 +249,7 @@ public class Truck implements Runnable{
 	
 	
 	public void leave() {
-		this.mode = TruckState.LEAVE;
+		this.mode = TruckState.LEAVING;
 		this.sendLeavingRequest();
 	}
 	
@@ -242,20 +257,34 @@ public class Truck implements Runnable{
 		new Thread(()->{
 			JSONObject data;
 			data = new JSONObject();
+			Random randomGenerator = new Random(); // randomGenerator.nextBoolean()
+			
 			if(true) {
+				System.out.println("Accepted");
 				data.put("type", RequestTypes.REQUEST_ENGAGE_ACCEPTED);
 			}else {
+				System.out.println("Rejected");
 				data.put("type", RequestTypes.REQUEST_ENGAGE_REJECTED);
 			}
 	  		data.put("truck_id", id);
 
 	  		try {
 				sendMessage(data.toString());
+				
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}).start();
+	}
+	
+	public Platoon getPlatoon() {
+		return platoon;
+	}
+	
+	public void formPlatoon(String endpoint, int port) throws UnknownHostException, IOException {
+		is_leader = true;
+		platoon = new Platoon(endpoint, port);
+		startConnection(endpoint, port);
 	}
 	
 	class InputHandler implements Runnable{
@@ -265,7 +294,6 @@ public class Truck implements Runnable{
 			
             JSONObject data;
             String type;
-            JSONObject response;
             String inputLine;
             
 			while(!finished) {
@@ -273,6 +301,7 @@ public class Truck implements Runnable{
 					inputLine = in.readLine();
 					data = new JSONObject(inputLine);
 					type = (String) data.get("type");
+					
 					
 					System.out.println("Truck " + getTruckId() + " reads " + inputLine + 
 										" on " + Thread.currentThread().getName());
@@ -291,7 +320,7 @@ public class Truck implements Runnable{
 						stopConnection();
 					}
 					else if(type.equals(ResponseTypes.RESPONSE_EMERGENCY_BREAKE.name())) {
-			        	accelerate(0, (int) data.get("acceleration"));
+			        	accelerate((int) data.get("acceleration"));
 			        	stopConnection();
 					}
 					else if(type.equals(RequestTypes.REQUEST_SEND_PLATOONING_DATA.name())){

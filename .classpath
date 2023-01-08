@@ -7,5 +7,6 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="D:/FH Dortmund/Courses/Distributed and Parallel Systems/json-20220924.jar"/>
+	<classpathentry kind="lib" path="D:/FH Dortmund/Courses/Distributed and Parallel Systems/java_libraries/aparapi-3.0.0.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

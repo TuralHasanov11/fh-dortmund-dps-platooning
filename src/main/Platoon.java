@@ -8,8 +8,11 @@ import java.net.UnknownHostException;
 import java.sql.Struct;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import org.json.JSONObject;
 
 import main.Truck.InputHandler;
 
@@ -17,10 +20,8 @@ import main.Truck.InputHandler;
 enum PlatoonState
 {
     STOPPED,
-    AVAILABLE,
     ENGAGING,
     JOINABLE,
-    PLATOONING
 };
 
 class V2VRange{
@@ -31,26 +32,23 @@ class V2VRange{
 	}
 };
 
-public class Platoon implements Runnable{
-    public ArrayList<Truck> trucks;
-    private Truck leader_truck;
+public class Platoon{
     private Enum<PlatoonState> state;
     private PlatoonServer server;
-    private int serverPort = 4444;
-    private String serverEndPoint = "127.0.0.1";
+    private int serverPort;
+    private String serverEndPoint;
 	private Thread serverThread;
 	private V2VRange v2vRange;
  
 
-    public Platoon() {
-    	trucks = new ArrayList<Truck>();
-    	setState(PlatoonState.AVAILABLE);
+    public Platoon(String endpoint, int port) {
+    	serverEndPoint = endpoint;
+    	serverPort = port;
+    	setState(PlatoonState.JOINABLE);
     	setV2vRange(new V2VRange(100));
+    	startServer();
 	}
     
-    public ArrayList<Truck> getTrucks() {
-		return trucks;
-	}
     
 	public V2VRange getV2vRange() {
 		return v2vRange;
@@ -81,80 +79,14 @@ public class Platoon implements Runnable{
 	    this.state = state;
 	}
 	
-	public void setLeader(Truck truck)
-	{
-	    this.leader_truck = truck;
-	    this.leader_truck.setLeader(true);
-	}
-    
-    public void addLeader(Truck truck) {
-    	AddTruckHandler addTruckHandler = new AddTruckHandler(truck);
-    	Thread t = new Thread(addTruckHandler);
-    	t.start();
-    }
-    
-    @Override
-    public void run() {
-    	System.out.println("Platoon running on " + Thread.currentThread().getName());
-		this.server = new PlatoonServer(serverEndPoint, serverPort, this);
+
+    public void startServer() {
+		server = new PlatoonServer(serverEndPoint, serverPort);
 		this.serverThread = new Thread(server);
 		serverThread.start();
-		
-  	  	while(true) {
-  	  		if(this.state == PlatoonState.JOINABLE) {
-  	  		}else if(this.state == PlatoonState.ENGAGING) {
-	  		} 
-	  		if(this.state.equals(PlatoonState.STOPPED)) {
-	  			System.out.println("STOPPPPED");
-	  		}
-  	  	}
-	}
-    
-    
-	public void stop()
-	{
-	    try {
-	    	for (Truck truck : trucks) {
-	    		truck.stopConnection();
-    		} 	
-			this.server.shutdown();
-		    this.trucks.clear();
-		    System.out.println(trucks);
-	    	this.setState(PlatoonState.STOPPED);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-	
+    }
+        
 	public boolean isRunning() {
-		return this.state == PlatoonState.AVAILABLE && this.server.isRunning(); 
-	}
-	
-
-	class AddTruckHandler implements Runnable{
-		
-		Truck truck;
-
-		public AddTruckHandler(Truck truck) {
-			this.truck = truck;
-		}
-
-		@Override
-		public void run() {
-	    	if(trucks.isEmpty()) {
-	    		leader_truck = truck;
-	    		leader_truck.setLeader(true);
-	    	}
-	    	trucks.add(truck);
-	    	
-	    	try {
-				truck.startConnection(serverEndPoint, serverPort);
-			} catch (UnknownHostException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-
-		}
+		return this.state == PlatoonState.JOINABLE && this.server.isRunning(); 
 	}
 }
